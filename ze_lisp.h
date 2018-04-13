@@ -4,7 +4,13 @@ typedef struct {
   int type;
   double num;
   int err;
-} lval;
+} dval;
 
-double eval_op(double x, char* op, double y);
-double eval(mpc_ast_t* t);
+dval eval_op(dval x, char* op, dval y);
+dval eval(mpc_ast_t* t);
+
+dval dval_num(double x);
+dval dval_err(int x);
+
+void dval_print(dval x);
+void dval_println(dval x);

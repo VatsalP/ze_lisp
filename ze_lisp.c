@@ -1,13 +1,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <editline/readline.h>
-#include <histedit.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #include "mpc.h"
 #include "ze_lisp.h"
 
 #define prompt "ayy> "
+
+/*
+	Enums
+*/
+enum { DVAL_NUM, DVAL_ERR };
+enum { DERR_DIV_ZERO, DERR_BAD_OP, DERR_BAD_NUM };
 
 
 int main(int argc, char** argv) {
@@ -39,10 +45,9 @@ int main(int argc, char** argv) {
 		/* Lets parse */
 		mpc_result_t r;
 		if (mpc_parse("<stdin>", input, Lispy, &r)) {
-			double result = eval(r.output);
+			dval result = eval(r.output);
 			/* Output */
-			fprintf(stdout, "%g\n", result);
-			mpc_ast_print(r.output);
+			dval_println(result);
 			mpc_ast_delete(r.output);
 		} else {
 			/* Print syntax error */
@@ -69,12 +74,23 @@ int main(int argc, char** argv) {
 
 	returns result of exp
 */
-double eval_op(double x, char* op, double y) {
-  if (strcmp(op, "+") == 0) { return x + y; }
-  if (strcmp(op, "-") == 0) { return x - y; }
-  if (strcmp(op, "*") == 0) { return x * y; }
-  if (strcmp(op, "/") == 0) { return x / y; }
-  return 0;
+dval eval_op(dval x, char* op, dval y) {
+	if (x.type == DVAL_ERR) { return x; }
+	if (x.type == DVAL_ERR) { return y; }
+
+	if (strcmp(op, "+") == 0) { return dval_num(x.num + y.num); }
+	if (strcmp(op, "-") == 0) { return dval_num(x.num - y.num); }
+	if (strcmp(op, "*") == 0) { return dval_num(x.num * y.num); }
+	if (strcmp(op, "/") == 0) { 
+		return y.num == 0
+      		? dval_err(DERR_DIV_ZERO)
+      		: dval_num(x.num / y.num); 
+	}
+	if (strcmp(op, "%") == 0) { 
+		double  ret = (int)x.num % (int)y.num;
+		return dval_num(ret);
+	}
+	return dval_err(DERR_BAD_OP);
 }
 
 /*
@@ -82,19 +98,15 @@ double eval_op(double x, char* op, double y) {
 
 	Returns final value
 */
-double eval(mpc_ast_t* t) {
+dval eval(mpc_ast_t* t) {
 
-	if (strstr(t->tag, "number")) {
-		return atof(t->contents);
-	}
-
-	if (strstr(t->tag, "float")) {
-		return atof(t->contents);
+	if (strstr(t->tag, "number") || strstr(t->tag, "float")) {
+		return dval_num(atof(t->contents));
 	}
 
 	char* op = t->children[1]->contents;
 	
-	double x = eval(t->children[2]);
+	dval x = eval(t->children[2]);
 
 	int i = 3;
 	while(strstr(t->children[i]->tag, "expr")) {
@@ -103,3 +115,49 @@ double eval(mpc_ast_t* t) {
 	}
 	return x;
 }
+
+
+/*
+	Create a new number type dval
+*/
+dval dval_num(double x) {
+	dval v;
+	v.type = DVAL_NUM;
+	v.num = x;
+	return v;
+}
+
+
+/*
+	Create a new error type dval
+*/
+dval dval_err(int x) {
+	dval v;
+	v.type = DVAL_ERR;
+	v.err = x;
+	return v;
+}
+
+
+/*
+	Print dval
+*/
+void dval_print(dval x) {
+	switch(x.type) {
+		case DVAL_NUM: printf("%f\n", x.num); break;
+
+		case DVAL_ERR:
+			if (x.err == DERR_DIV_ZERO) {
+				printf("Error: Division by Zero");
+			}
+			if (x.err == DERR_BAD_OP) {
+				printf("Error: Invalid Operator");
+			}
+			if (x.err == DERR_BAD_NUM) {
+				printf("Error: Invalid Number");
+			}
+			break;
+	}
+}
+
+void dval_println(dval x) { dval_print(x); putchar('\n'); }
